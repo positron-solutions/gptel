@@ -1,6 +1,10 @@
 #+title: gptel: The Fork
 
-PRs are accepted.  Be sure to allow edits when setting up PRs.  You may file issues before working on features to validate the scope / nature of changes.
+This package provide common functionality for adapting Emacs to LLM backends, making it easier to build frontends.
+** Contributing
+PRs are accepted.  Be sure to allow edits when setting up PRs.  You may file issues before working on features to validate the scope / nature of changes or just get help planning.
+
+Target the *experimental branch* unless your changes are fixes for stable releases or release candidates.  The experimental branch will be periodically split into a release candidate branch and stabilized before merge to master.  The experimental branch may have its history re-written.  *Fetch before merging.
 ** Why a Fork?
 - Faster development process with low-friction experimental branch
 - Less commitment to future dead weight or counterproductive features
@@ -44,8 +48,8 @@ Introspection of this package itself using tools will be added.  This should aid
 
   ;; or use manual load-path & require, you brave yak shaver
 #+end_src
-** Continue Old Readme
-gptel is a simple Large Language Model chat client for Emacs, with support for multiple models and backends.  It works in the spirit of Emacs, available at any time and uniformly in any buffer.
+** Backend Support List
+Before requesting a backend, check if it implements some other backend's API and is compatiable without further changes.
 
 #+html: <div align="center">
 | LLM Backend        | Supports | Requires                   |
@@ -73,165 +77,16 @@ gptel is a simple Large Language Model chat client for Emacs, with support for m
 | xAI                | ✓        | [[https://console.x.ai?utm_source=github_gptel&utm_medium=github_readme&utm_campaign=link][API key]]                    |
 #+html: </div>
 
-*General usage*: ([[https://www.youtube.com/watch?v=bsRnh_brggM][YouTube Demo]])
-
-https://user-images.githubusercontent.com/8607532/230516812-86510a09-a2fb-4cbd-b53f-cc2522d05a13.mp4
-
-https://user-images.githubusercontent.com/8607532/230516816-ae4a613a-4d01-4073-ad3f-b66fa73c6e45.mp4
-
-*In-place usage*
-
-#+html: <p align="center">
-https://github.com/user-attachments/assets/cec11aec-52f6-412e-9e7a-9358e8b9b1bf
-#+html: </p>
-
-*Tool use* (experimental)
-
-#+html: <p align="center">
-https://github.com/user-attachments/assets/5f993659-4cfd-49fa-b5cd-19c55766b9b2
-#+html: </p>
-
-#+html: <p align="center">
-https://github.com/user-attachments/assets/8f57c20b-e1b0-4d86-b972-f46fb90ae1e7
-#+html: </p>
-
-See also [[https://youtu.be/g1VMGhC5gRU][this youtube demo (2 minutes)]] by Armin Darvish.
-
-# *Media support*
-
-# #+html: <p align="center">
-# https://github.com/user-attachments/assets/1fd947e1-226b-4be2-bc68-7b22b2e3215f
-# #+html: </p>
-
-# *Multi-LLM support demo*:
-
-# https://github-production-user-asset-6210df.s3.amazonaws.com/8607532/278854024-ae1336c4-5b87-41f2-83e9-e415349d6a43.mp4
-
-------
-
-- gptel is async and fast, streams responses.
 - Interact with LLMs from anywhere in Emacs (any buffer, shell, minibuffer, wherever).
+- Supports multi-modal input (include images, documents).
 - LLM responses are in Markdown or Org markup.
 - Supports multiple independent conversations and one-off ad hoc interactions.
 - Supports tool-use to equip LLMs with agentic capabilities (experimental feature).
-- Supports multi-modal input (include images, documents).
-- Save chats as regular Markdown/Org/Text files and resume them later.
 - Edit your previous prompts or LLM responses when continuing a conversation. These will be fed back to the model.
-- Supports introspection, so you can see /exactly/ what will be sent.  Inspect and modify queries before sending them.
+- Introspection and logging tools for debugging and dry-runs
 - Pause multi-stage requests at an intermediate stage and resume them later.
 - Don't like gptel's workflow? Use it to create your own for any supported model/backend with a [[https://github.com/karthink/gptel/wiki/Defining-custom-gptel-commands][simple API]].
 
-gptel uses Curl if available, but falls back to the built-in url-retrieve to work without external dependencies.
-
-** Contents :toc:
-  - [[#breaking-changes][Breaking changes!]]
-  - [[#installation][Installation]]
-      - [[#straight][Straight]]
-      - [[#manual][Manual]]
-      - [[#doom-emacs][Doom Emacs]]
-      - [[#spacemacs][Spacemacs]]
-  - [[#setup][Setup]]
-    - [[#chatgpt][ChatGPT]]
-    - [[#other-llm-backends][Other LLM backends]]
-      - [[#azure][Azure]]
-      - [[#gpt4all][GPT4All]]
-      - [[#ollama][Ollama]]
-      - [[#gemini][Gemini]]
-      - [[#llamacpp-or-llamafile][Llama.cpp or Llamafile]]
-      - [[#kagi-fastgpt--summarizer][Kagi (FastGPT & Summarizer)]]
-      - [[#togetherai][together.ai]]
-      - [[#anyscale][Anyscale]]
-      - [[#perplexity][Perplexity]]
-      - [[#anthropic-claude][Anthropic (Claude)]]
-      - [[#groq][Groq]]
-      - [[#openrouter][OpenRouter]]
-      - [[#privategpt][PrivateGPT]]
-      - [[#deepseek][DeepSeek]]
-      - [[#cerebras][Cerebras]]
-      - [[#github-models][Github Models]]
-      - [[#novita-ai][Novita AI]]
-      - [[#xai][xAI]]
-  - [[#usage][Usage]]
-    - [[#in-any-buffer][In any buffer:]]
-    - [[#in-a-dedicated-chat-buffer][In a dedicated chat buffer:]]
-      - [[#including-media-images-documents-with-requests][Including media (images, documents) with requests]]
-    - [[#setting-options-backend-model-request-parameters-system-prompts-and-more][Setting options (backend, model, request parameters, system prompts and more)]]
-    - [[#include-more-context-with-requests][Include more context with requests]]
-    - [[#tool-use-experimental][Tool use (experimental)]]
-      - [[#defining-gptel-tools][Defining gptel tools]]
-      - [[#selecting-tools][Selecting tools]]
-    - [[#rewrite-refactor-or-fill-in-a-region][Rewrite, refactor or fill in a region]]
-    - [[#extra-org-mode-conveniences][Extra Org mode conveniences]]
-  - [[#faq][FAQ]]
-    - [[#chat-buffer-ui][Chat buffer UI]]
-      - [[#i-want-the-window-to-scroll-automatically-as-the-response-is-inserted][I want the window to scroll automatically as the response is inserted]]
-      - [[#i-want-the-cursor-to-move-to-the-next-prompt-after-the-response-is-inserted][I want the cursor to move to the next prompt after the response is inserted]]
-      - [[#i-want-to-change-the-formatting-of-the-prompt-and-llm-response][I want to change the formatting of the prompt and LLM response]]
-      - [[#how-does-gptel-distinguish-between-user-prompts-and-llm-responses][How does gptel distinguish between user prompts and LLM responses?]]
-    - [[#transient-menu-behavior][Transient menu behavior]]
-      - [[#i-want-the-transient-menu-options-to-be-saved-so-i-only-need-to-set-them-once][I want the transient menu options to be saved so I only need to set them once]]
-      - [[#using-the-transient-menu-leaves-behind-extra-windows][Using the transient menu leaves behind extra windows]]
-      - [[#can-i-change-the-transient-menu-key-bindings][Can I change the transient menu key bindings?]]
-      - [[#doom-emacs-sending-a-query-from-the-gptel-menu-fails-because-of-a-key-conflict-with-org-mode][(Doom Emacs) Sending a query from the gptel menu fails because of a key conflict with Org mode]]
-    - [[#miscellaneous][Miscellaneous]]
-      - [[#i-want-to-use-gptel-in-a-way-thats-not-supported-by-gptel-send-or-the-options-menu][I want to use gptel in a way that's not supported by =gptel-send= or the options menu]]
-      - [[#chatgpt-i-get-the-error-http2-429-you-exceeded-your-current-quota][(ChatGPT) I get the error "(HTTP/2 429) You exceeded your current quota"]]
-      - [[#why-another-llm-client][Why another LLM client?]]
-  - [[#additional-configuration][Additional Configuration]]
-  - [[#alternatives][Alternatives]]
-    - [[#packages-using-gptel][Packages using gptel]]
-  - [[#acknowledgments][Acknowledgments]]
-
-** Breaking changes!
-
-- =gptel-model= is now expected to be a symbol, not a string.  Please update your configuration.
-
-** Installation
-
-gptel can be installed in Emacs out of the box with =M-x package-install= ⏎ =gptel=.  This installs the latest commit.
-
-If you want the stable version instead, add NonGNU-devel ELPA or MELPA-stable to your list of package sources (=package-archives=), then install gptel with =M-x package-install⏎= =gptel= from these sources.
-
-(Optional: Install =markdown-mode=.)
-
-#+html: <details><summary>
-**** Straight
-#+html: </summary>
-#+begin_src emacs-lisp
-  (straight-use-package 'gptel)
-#+end_src
-#+html: </details>
-#+html: <details><summary>
-**** Manual
-#+html: </summary>
-Clone or download this repository and run =M-x package-install-file⏎= on the repository directory.
-#+html: </details>
-#+html: <details><summary>
-**** Doom Emacs
-#+html: </summary>
-In =packages.el=
-#+begin_src emacs-lisp
-(package! gptel)
-#+end_src
-
-In =config.el=
-#+begin_src emacs-lisp
-(use-package! gptel
- :config
- (setq! gptel-api-key "your key"))
-#+end_src
-"your key" can be the API key itself, or (safer) a function that returns the key.  Setting =gptel-api-key= is optional, you will be asked for a key if it's not found.
-
-#+html: </details>
-#+html: <details><summary>
-**** Spacemacs
-#+html: </summary>
-In your =.spacemacs= file, add =llm-client= to =dotspacemacs-configuration-layers=.
-#+begin_src emacs-lisp
-(llm-client :variables
-            llm-client-enable-gptel t)
-#+end_src
-#+html: </details>
 ** Setup
 *** ChatGPT
 Procure an [[https://platform.openai.com/account/api-keys][OpenAI API key]].
@@ -915,13 +770,6 @@ gptel provides a few powerful, general purpose and flexible commands.  You can d
 | =gptel-add-file= | Add a file (text or supported media type) to gptel's context.  Also available from the transient menu. |
 |------------------+--------------------------------------------------------------------------------------------------------|
 
-|----------------------------+-----------------------------------------------------------------------------------------|
-| *Org mode bonuses*         |                                                                                         |
-|----------------------------+-----------------------------------------------------------------------------------------|
-| =gptel-org-set-topic=      | Limit conversation context to an Org heading.  (For branching conversations see below.) |
-| =gptel-org-set-properties= | Write gptel configuration as Org properties, for per-heading chat configuration.        |
-|----------------------------+-----------------------------------------------------------------------------------------|
-
 *** In any buffer:
 
 1. Call =M-x gptel-send= to send the text up to the cursor. The response will be inserted below.  Continue the conversation by typing below the response.
@@ -1371,57 +1219,8 @@ Other Emacs clients for LLMs prescribe the format of the interaction (a comint s
 
 #+html: </details>
 
-** COMMENT Will you add feature X?
-Maybe, I'd like to experiment a bit more first.  Features added since the inception of this package include
-- Curl support (=gptel-use-curl=).
-- Streaming responses (=gptel-stream=).
-- Cancelling requests in progress (=gptel-abort=)
-- General API for writing your own commands (=gptel-request=, [[https://github.com/karthink/gptel/wiki/Defining-custom-gptel-commands][wiki]])
-- Dispatch menus using Transient (=gptel-send= with a prefix arg).
-- Specifying the conversation context size.
-- GPT-4 support.
-- Response redirection (to the echo area, another buffer, etc).
-- A built-in refactor/rewrite prompt.
-- Limiting conversation context to Org headings using properties (#58).
-- Saving and restoring chats (#17).
-- Support for local LLMs.
-
-Features being considered or in the pipeline:
-- Fully stateless design ([[https://github.com/karthink/gptel/discussions/119][discussion #119]]).
-
-** Alternatives
-Other Emacs clients for LLMs include
-
-- [[https://github.com/ahyatt/llm][llm]]: llm provides a uniform API across language model providers for building LLM clients in Emacs, and is intended as a library for use by package authors.  For similar scripting purposes, gptel provides the command =gptel-request=, which see.
-- [[https://github.com/s-kostyaev/ellama][Ellama]]: A full-fledged LLM client built on llm, that supports many LLM providers (Ollama, Open AI, Vertex, GPT4All and more).  Its usage differs from gptel in that it provides separate commands for dozens of common tasks, like general chat, summarizing code/text, refactoring code, improving grammar, translation and so on.
-- [[https://github.com/xenodium/chatgpt-shell][chatgpt-shell]]: comint-shell based interaction with ChatGPT.  Also supports DALL-E, executable code blocks in the responses, and more.
-- [[https://github.com/rksm/org-ai][org-ai]]: Interaction through special =#+begin_ai ... #+end_ai= Org-mode blocks.  Also supports DALL-E, querying ChatGPT with the contents of project files, and more.
-
-There are several more: [[https://github.com/MichaelBurge/leafy-mode][leafy-mode]], [[https://github.com/iwahbe/chat.el][chat.el]], [[https://github.com/stuhlmueller/gpt.el][gpt.el]],  [[https://github.com/AnselmC/le-gpt.el][le-gpt]], [[https://github.com/stevemolitor/robby][robby]].
-
-*** Packages using gptel
-gptel is a general-purpose package for chat and ad-hoc LLM interaction.  The following packages use gptel to provide additional or specialized functionality:
-
-- [[https://github.com/karthink/gptel-quick][gptel-quick]]: Quickly look up the region or text at point.
-- [[https://github.com/daedsidog/evedel][Evedel]]: Instructed LLM Programmer/Assistant.
-- [[https://github.com/lanceberge/elysium][Elysium]]: Automatically apply AI-generated changes as you code.
-- [[https://github.com/kamushadenes/ai-blog.el][ai-blog.el]]: Streamline generation of blog posts in Hugo.
-- [[https://github.com/douo/magit-gptcommit][magit-gptcommit]]: Generate Commit Messages within magit-status Buffer using gptel.
-- [[https://github.com/armindarvish/consult-omni][consult-omni]]: Versatile multi-source search package.  It includes gptel as one of its many sources.
-- [[https://github.com/ultronozm/ai-org-chat.el][ai-org-chat]]: Provides branching conversations in Org buffers using gptel.  (Note that gptel includes this feature as well (see =gptel-org-branching-context=), but requires a recent version of Org mode 9.7 or later to be installed.)
-- [[https://github.com/rob137/Corsair][Corsair]]: Helps gather text to populate LLM prompts for gptel.
-
-** COMMENT Older Breaking Changes
-- =gptel-post-response-hook= has been renamed to =gptel-post-response-functions=, and functions in this hook are now called with two arguments: the start and end buffer positions of the response.  This should make it easy to act on the response text without having to locate it first.
-
-- Possible breakage, see #120: If streaming responses stop working for you after upgrading to v0.5, try reinstalling gptel and deleting its native comp eln cache in =native-comp-eln-load-path=.
-
-- The user option =gptel-host= is deprecated.  If the defaults don't work for you, use =gptel-make-openai= (which see) to customize server settings.
-
-- =gptel-api-key-from-auth-source= now searches for the API key using the host address for the active LLM backend, /i.e./ "api.openai.com" when using ChatGPT.  You may need to update your =~/.authinfo=.
-
 ** Acknowledgments
-
+- [[https://github.com/karthink/gptel][Karthink]] for the original GPTel
 - [[https://github.com/meain][Abin Simon]] for extensive feedback on improving gptel's directives and UI.
 - [[https://github.com/algal][Alexis Gallagher]] and [[https://github.com/d1egoaz][Diego Alvarez]] for fixing a nasty multi-byte bug with =url-retrieve=.
 - [[https://github.com/tarsius][Jonas Bernoulli]] for the Transient library.
