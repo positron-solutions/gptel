@@ -4,7 +4,7 @@
 
 ;; Author: Karthik Chikmagalur <karthik.chikmagalur@gmail.com>
 ;; Version: 0.9.7
-;; Package-Requires: ((emacs "27.1") (transient "0.7.4") (compat "29.1.4.1"))
+;; Package-Requires: ((emacs "30.1") (transient "0.8.5") (compat "30.0.0.0"))
 ;; Keywords: convenience, tools
 ;; URL: https://github.com/karthink/gptel
 
@@ -171,8 +171,6 @@
 (declare-function gptel-org-set-topic "gptel-org")
 (declare-function gptel--stream-convert-markdown->org "gptel-org")
 (declare-function gptel--convert-markdown->org "gptel-org")
-(define-obsolete-function-alias
-  'gptel-set-topic 'gptel-org-set-topic "0.7.5")
 
 (eval-when-compile
   (require 'subr-x))
@@ -482,15 +480,6 @@ To set the temperature for a chat session interactively call
      :input-cost 0.15
      :output-cost 0.60
      :cutoff-date "2023-10")
-    (gpt-4-turbo
-     :description "Previous high-intelligence model"
-     :capabilities (media tool-use url)
-     :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp")
-     :context-window 128
-     :input-cost 10
-     :output-cost 30
-     :cutoff-date "2023-12")
-    ;; points to gpt-4-0613
     (gpt-4
      :description "GPT-4 snapshot from June 2023 with improved function calling support"
      :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp")
@@ -499,22 +488,6 @@ To set the temperature for a chat session interactively call
      :input-cost 30
      :output-cost 60
      :cutoff-date "2023-09")
-    (gpt-4-turbo-preview
-     :description "Points to gpt-4-0125-preview"
-     :capabilities (media tool-use url)
-     :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp")
-     :context-window 128
-     :input-cost 10
-     :output-cost 30
-     :cutoff-date "2023-12")
-    (gpt-4-0125-preview
-     :description "GPT-4 Turbo preview model intended to reduce cases of “laziness”"
-     :capabilities (media tool-use url)
-     :mime-types ("image/jpeg" "image/png" "image/gif" "image/webp")
-     :context-window 128
-     :input-cost 10
-     :output-cost 30
-     :cutoff-date "2023-12")
     (gpt-4.5-preview
      :description "Largest and most capable GPT model to date"
      :capabilities (media tool-use url)
@@ -557,33 +530,7 @@ To set the temperature for a chat session interactively call
      :output-cost 12
      :cutoff-date "2023-10"
      :capabilities (nosystem reasoning)
-     :request-params (:stream :json-false))
-    ;; limited information available
-    (gpt-4-32k
-     :capabilities (tool-use)
-     :input-cost 60
-     :output-cost 120)
-    (gpt-4-1106-preview
-     :description "Preview model with improved function calling support"
-     :capabilities (tool-use)
-     :context-window 128
-     :input-cost 10
-     :output-cost 30
-     :cutoff-date "2023-04")
-    (gpt-3.5-turbo
-     :description "More expensive & less capable than GPT-4o-mini; use that instead"
-     :capabilities (tool-use)
-     :context-window 16.358
-     :input-cost 0.50
-     :output-cost 1.50
-     :cutoff-date "2021-09")
-    (gpt-3.5-turbo-16k
-     :description "More expensive & less capable than GPT-4o-mini; use that instead"
-     :capabilities (tool-use)
-     :context-window 16.385
-     :input-cost 3
-     :output-cost 4
-     :cutoff-date "2021-09"))
+     :request-params (:stream :json-false)))
   "List of available OpenAI models and associated properties.
 Keys:
 
