@@ -134,23 +134,6 @@
 ;; or fill in the region.  This is accessible via `gptel-rewrite', and also from
 ;; the `gptel-send' menu.
 ;;
-;; gptel in Org mode:
-;;
-;; gptel offers a few extra conveniences in Org mode:
-;;
-;; - You can limit the conversation context to an Org heading with
-;;   `gptel-org-set-topic'.
-;;   
-;; - You can have branching conversations in Org mode, where each hierarchical
-;;   outline path through the document is a separate conversation branch.
-;;   See the variable `gptel-org-branching-context'.
-;;   
-;; - You can declare the gptel model, backend, temperature, system message and
-;;   other parameters as Org properties with the command
-;;   `gptel-org-set-properties'.  gptel queries under the corresponding heading
-;;   will always use these settings, allowing you to create mostly reproducible
-;;   LLM chat notebooks.
-;;
 ;; Finally, gptel offers a general purpose API for writing LLM ineractions
 ;; that suit your workflow, see `gptel-request'.
 

@@ -93,80 +93,6 @@ of Org."
       "Get `:begin' property of NODE."
       (org-element-property :begin node))))
 
-
-;;; User options
-(defcustom gptel-org-branching-context nil
-  "Use the lineage of the current heading as the context for gptel in Org buffers.
-
-This makes each same level heading a separate conversation
-branch.
-
-By default, gptel uses a linear context: all the text up to the
-cursor is sent to the LLM.  Enabling this option makes the
-context the hierarchical lineage of the current Org heading.  In
-this example:
-
------
-Top level text
-
-* Heading 1
-heading 1 text
-
-* Heading 2
-heading 2 text
-
-** Heading 2.1
-heading 2.1 text
-** Heading 2.2
-heading 2.2 text
------
-
-With the cursor at the end of the buffer, the text sent to the
-LLM will be limited to
-
------
-Top level text
-
-* Heading 2
-heading 2 text
-
-** Heading 2.2
-heading 2.2 text
------
-
-This makes it feasible to have multiple conversation branches."
-  :local t
-  :type 'boolean
-  :group 'gptel)
-
-
-;;; Setting context and creating queries
-(defun gptel-org--get-topic-start ()
-  "If a conversation topic is set, return it."
-  (when (org-entry-get (point) "GPTEL_TOPIC" 'inherit)
-    (marker-position org-entry-property-inherited-from)))
-
-(defun gptel-org-set-topic (topic)
-  "Set a TOPIC and limit this conversation to the current heading.
-
-This limits the context sent to the LLM to the text between the
-current heading and the cursor position."
-  (interactive
-   (list
-    (progn
-      (or (derived-mode-p 'org-mode)
-          (user-error "Support for multiple topics per buffer is only implemented for `org-mode'"))
-      (completing-read "Set topic as: "
-                       (org-property-values "GPTEL_TOPIC")
-                       nil nil (downcase
-                                (truncate-string-to-width
-                                 (substring-no-properties
-                                  (replace-regexp-in-string
-                                   "\\s-+" "-"
-                                   (org-get-heading)))
-                                 50))))))
-  (when (stringp topic) (org-set-property "GPTEL_TOPIC" topic)))
-
 ;; NOTE: This can be converted to a cl-defmethod for `gptel--parse-buffer'
 ;; (conceptually cleaner), but will cause load-order issues in gptel.el and
 ;; might be harder to debug.
@@ -177,75 +103,25 @@ If `gptel--num-messages-to-send' is set, limit to that many
 recent exchanges.
 
 The prompt is constructed from the contents of the buffer up to
-point, or PROMPT-END if provided.  Its contents depend on the
-value of `gptel-org-branching-context', which see."
+point, or PROMPT-END if provided."
   (unless prompt-end (setq prompt-end (point)))
   (let ((max-entries (and gptel--num-messages-to-send
-                          (* 2 gptel--num-messages-to-send)))
-        (topic-start (gptel-org--get-topic-start)))
-    (when topic-start
-      ;; narrow to GPTEL_TOPIC property scope
-      (narrow-to-region topic-start prompt-end))
-    (if (and gptel-org-branching-context
-             (or (fboundp 'org-element-lineage-map)
-                 (prog1 nil
-                   (display-warning
-                    '(gptel org)
-                    "Using `gptel-org-branching-context' requires Org version 9.7 or higher, it will be ignored."))))
-        ;; Create prompt from direct ancestors of point
-        (save-excursion
-          (let* ((org-buf (current-buffer))
-                 (start-bounds (gptel-org--element-lineage-map
-                                   (org-element-at-point) #'gptel-org--element-begin
-                                 '(headline org-data) 'with-self))
-                 (end-bounds
-                  (cl-loop
-                   for (pos . rest) on (cdr start-bounds)
-                   while
-                   (and (>= pos (point-min)) ;respect narrowing
-                        (goto-char pos)
-                        ;; org-element-lineage always returns an extra
-                        ;; (org-data) element at point 1.  If there is also a
-                        ;; heading here, it is either a false positive or we
-                        ;; would be double counting it.  So we reject this node
-                        ;; when also at a heading.
-                        (not (and (eq pos 1) (org-at-heading-p)
-                                  ;; Skip if at the last element of start-bounds,
-                                  ;; since we captured this heading already (#476)
-                                  (null rest))))
-                   do (outline-next-heading)
-                   collect (point) into ends
-                   finally return (cons prompt-end ends))))
-            (with-temp-buffer
-              ;; TODO(org) duplicated below
-              (dolist (sym '( gptel-backend gptel--system-message gptel-model
-                              gptel-mode gptel-track-response gptel-track-media))
-                (set (make-local-variable sym)
-                     (buffer-local-value sym org-buf)))
-              (cl-loop for start in start-bounds
-                       for end in end-bounds
-                       do (insert-buffer-substring org-buf start end)
-                       (goto-char (point-min)))
-              (goto-char (point-max))
-              (gptel--org-unescape-tool-results)
-              (gptel--org-strip-tool-headers)
-              (let ((major-mode 'org-mode))
-                (gptel--parse-buffer gptel-backend max-entries)))))
-      ;; Create prompt the usual way
-      (let ((org-buf (current-buffer))
-            (beg (point-min))
-            (end (point-max)))
-        (with-temp-buffer
-          ;; TODO(org) duplicated above
-          (dolist (sym '( gptel-backend gptel--system-message gptel-model
-                          gptel-mode gptel-track-response gptel-track-media))
-            (set (make-local-variable sym)
-                 (buffer-local-value sym org-buf)))
-          (insert-buffer-substring org-buf beg end)
-          (gptel--org-unescape-tool-results)
-          (gptel--org-strip-tool-headers)
-          (let ((major-mode 'org-mode))
-            (gptel--parse-buffer gptel-backend max-entries)))))))
+                          (* 2 gptel--num-messages-to-send))))
+
+    (let ((org-buf (current-buffer))
+          (beg (point-min))
+          (end (point-max)))
+      (with-temp-buffer
+        ;; TODO(org) duplicated above
+        (dolist (sym '( gptel-backend gptel--system-message gptel-model
+                        gptel-mode gptel-track-response gptel-track-media))
+          (set (make-local-variable sym)
+               (buffer-local-value sym org-buf)))
+        (insert-buffer-substring org-buf beg end)
+        (gptel--org-unescape-tool-results)
+        (gptel--org-strip-tool-headers)
+        (let ((major-mode 'org-mode))
+          (gptel--parse-buffer gptel-backend max-entries))))))
 
 ;; Handle media links in the buffer
 (cl-defmethod gptel--parse-media-links ((_mode (eql 'org-mode)) beg end)
