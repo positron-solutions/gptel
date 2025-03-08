@@ -225,7 +225,7 @@ See generic implementation for full documentation."
            else collect (list :role "model" :parts `(:text ,text)) into prompts
            finally return prompts))
 
-(cl-defmethod gptel--parse-buffer ((_backend gptel-gemini) &optional max-entries)
+(cl-defmethod gptel--parse-buffer ((backend gptel-gemini) &optional max-entries)
   (let ((prompts) (prev-pt (point))
         (include-media (and gptel-track-media (or (gptel--model-capable-p 'media)
                                                   (gptel--model-capable-p 'url)))))
@@ -241,25 +241,15 @@ See generic implementation for full documentation."
                (push (list :role "model" :parts (list :text content)) prompts)))
             (`(tool . ,_id)
              (save-excursion
-               ;; XXX has not been tested at all 🤠
-               (condition-case-unless-debug _err
+               (condition-case nil
                    (let* ((tool-call (read (current-buffer)))
                           (name (plist-get tool-call :name))
-                          (arguments (json-serialize (plist-get tool-call :args)
-                                                     :null-object nil
-                                                     :false-object :json-false)))
-                     (push
-                      (list :role "user"
-                            :parts `(:functionResponse
-                                     ;; XXX if the response is supposed to be
-                                     ;; JSON, we have to de-serialize tool's
-                                     ;; return value as JSON into the response
-                                     ;; section of the tool result, then
-                                     ;; re-serialize it from Elisp here.
-                                     (vector (string-trim
-                                              (buffer-substring-no-properties
-                                               (point) prev-pt)))))
-                      prompts)
+                          (arguments  (plist-get tool-call :args)))
+                     (plist-put tool-call :result
+                                (string-trim (buffer-substring-no-properties
+                                              (point) prev-pt)))
+                     (push (gptel--parse-tool-results backend (list tool-call))
+                           prompts)
                      (push (list :role "model"
                                  :parts
                                  (vector `(:functionCall ( :name ,name
