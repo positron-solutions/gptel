@@ -262,13 +262,22 @@ Optional RAW disables text properties and transformation."
            ;; (run-hooks 'gptel-pre-stream-hook)
            (insert response)
            (when (and gptel-mode (not raw))
-               (if message-marker
-                   (move-marker message-marker (point))
-                 (plist-put info :message-marker (point-marker))))
+             (if message-marker
+                 (move-marker message-marker (point))
+               (plist-put info :message-marker (point-marker))))
            (run-hooks 'gptel-post-stream-hook)))))
-    (`(reasoning . ,_text)
-       (display-warning '(gptel gptel-reasoning)
-                        "Reasoning unsupported." :warning))
+    (`(reasoning . ,text)
+     (pcase (plist-get info :include-reasoning)
+       ('nil)
+       ('t (gptel-curl--stream-insert-response text info))
+       ('ignore
+        (add-text-properties
+         0 (length text) '(gptel ignore front-sticky (gptel)) text)
+        (gptel-curl--stream-insert-response text info t))
+       ((pred stringp)
+        (with-current-buffer (get-buffer-create (plist-get info :reasoning))
+          (save-excursion (goto-char (point-max))
+                          (insert text))))))
     (`(tool-call . ,tool-calls)
      (gptel--display-tool-calls tool-calls info))
     (`(tool-result . ,tool-results)
@@ -276,7 +285,8 @@ Optional RAW disables text properties and transformation."
 
 (defun gptel-curl--stream-filter (process output)
   (let* ((fsm (alist-get process gptel--request-alist))
-         (proc-info (gptel-fsm-info fsm)))
+         (proc-info (gptel-fsm-info fsm))
+         (thinking (plist-get proc-info :thinking)))
     (with-current-buffer (process-buffer process)
       ;; Insert output
       (save-excursion
@@ -307,6 +317,24 @@ Optional RAW disables text properties and transformation."
                     (response ;; (funcall (plist-get proc-info :parser) nil proc-info)
                      (gptel-curl--parse-stream (plist-get proc-info :backend) proc-info))
                     ((not (equal response ""))))
+          ;; :thinking has three states: nil before checking for <think> blocks,
+          ;; t when in a <think> block, 'done after or otherwise.
+          (unless (eq thinking 'done)
+            (if thinking
+                (if-let* ((idx (string-match-p "</think>" response)))
+                    (progn (funcall (or (plist-get proc-info :callback)
+                                        #'gptel-curl--stream-insert-response)
+                                    (cons 'reasoning
+                                          (string-trim-left
+                                           (substring response nil (+ idx 8))))
+                                    proc-info)
+                           (setq response (substring response (+ idx 8)))
+                           (plist-put proc-info :thinking 'done))
+                  (setq response (cons 'reasoning response)))
+              (if (string-match-p "^ *<think>" response)
+                  (progn (setq response (cons 'reasoning response))
+                         (plist-put proc-info :thinking t))
+                (plist-put proc-info :thinking 'done))))
           (funcall (or (plist-get proc-info :callback)
                        #'gptel-curl--stream-insert-response)
                    response proc-info))))))
@@ -341,6 +369,14 @@ PROCESS and _STATUS are process parameters."
         (gptel--fsm-transition fsm)     ;WAIT -> TYPE
         (when error (plist-put proc-info :error error))
         (when (or response (not (member http-status '("200" "100"))))
+          (when (string-match-p "^ *<think>\n" response)
+            (when-let* ((idx (string-search "</think>\n" response)))
+              (with-demoted-errors "gptel callback error: %S"
+                (funcall proc-callback
+                         (cons 'reasoning (substring response nil (+ idx 8)))
+                         proc-info))
+              (setq response
+                    (string-trim-left (substring response (+ idx 8))))))
           (with-demoted-errors "gptel callback error: %S"
             (funcall proc-callback response proc-info))))
       (gptel--fsm-transition fsm))      ;TYPE -> next
