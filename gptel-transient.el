@@ -497,28 +497,28 @@ This is used only for setting this variable via `gptel-menu'.")
            (oset obj value value)))
 
 (defclass gptel-provider-variable (transient-lisp-variable)
-  ((model       :initarg :model)
-   (model-value :initarg :model-value)
+  ((backend       :initarg :backend)
+   (backend-value :initarg :backend-value)
    (always-read :initform t)
    (set-value :initarg :set-value :initform #'set))
   "Class used for gptel-backends.")
 
 (cl-defmethod transient-format-value ((obj gptel-provider-variable))
   (propertize (concat
-               (gptel-backend-name (oref obj value)) ":"
-               (gptel--model-name
-                (buffer-local-value (oref obj model) transient--original-buffer)))
+               (gptel-backend-name
+                (buffer-local-value (oref obj backend) transient--original-buffer)) ":"
+               (gptel--model-name (oref obj value)))
               'face 'transient-value))
 
 (cl-defmethod transient-infix-set ((obj gptel-provider-variable) value)
   (pcase-let ((`(,backend-value ,model-value) value))
     (funcall (oref obj set-value)
              (oref obj variable)
-             (oset obj value backend-value)
+             (oset obj value model-value)
              gptel--set-buffer-locally)
     (funcall (oref obj set-value)
-             (oref obj model)
-             (oset obj model-value model-value)
+             (oref obj backend)
+             (oset obj backend-value backend-value)
              gptel--set-buffer-locally))
   (transient-setup))
 
@@ -556,8 +556,6 @@ Also format its value in the Transient menu."
 
 
 ;; * Transient Prefixes
-
-(define-obsolete-function-alias 'gptel-send-menu 'gptel-menu "0.3.2")
 
 ;;;###autoload (autoload 'gptel-menu "gptel-transient" nil t)
 (transient-define-prefix gptel-menu ()
@@ -913,9 +911,9 @@ responses."
   :description "Model"
   :class 'gptel-provider-variable
   :prompt "Model: "
-  :variable 'gptel-backend
+  :variable 'gptel-model
   :set-value #'gptel--set-with-scope
-  :model 'gptel-model
+  :backend 'gptel-backend
   :key "-m"
   :reader (lambda (prompt &rest _)
             (cl-loop
@@ -950,7 +948,9 @@ responses."
 		       " " (propertize " " 'display `(space :align-to 166))
 		       cutoff)))))
              finally return
-             (cdr (assoc (completing-read prompt models-alist nil t)
+             (cdr (assoc (completing-read prompt models-alist nil t nil nil
+					  (concat (gptel-backend-name gptel-backend) ":"
+						  (gptel--model-name gptel-model)))
                          models-alist)))))
 
 (transient-define-infix gptel--infix-temperature ()
@@ -982,7 +982,7 @@ querying the LLM."
   :set-value #'gptel--set-with-scope
   :display-if-true "Yes"
   :display-if-false "No"
-  :key "-v")
+  :key "-R")
 
 (transient-define-infix gptel--infix-track-media ()
   "Send media from \"standalone\" links in the prompt.
@@ -1124,7 +1124,7 @@ Available behaviors are
   :display-map '((nil    . "No")
                  (ignore . "and ignore")
                  (t      . "with response"))
-  :key "-r"
+  :key "-v"
   :prompt "Include reasoning: "
   :reader (lambda (prompt &rest _)
             (let* ((choices '(("no"     . nil)

@@ -228,7 +228,21 @@ information if the stream contains it."
                           ;; NOTE: Do NOT use `push' for this, it prepends and we lose the reference
                           (plist-put info :tool-use (cons tool-call (plist-get info :tool-use))))
                       ;; old tool block continues, so continue collecting arguments in :partial_json 
-                      (push (plist-get func :arguments) (plist-get info :partial_json)))))))))
+                      (push (plist-get func :arguments) (plist-get info :partial_json)))))
+                ;; Check for reasoning blocks, currently only used by Openrouter
+                ;; MAYBE: Should this be moved to a dedicated Openrouter backend?
+                (unless (or (eq (plist-get info :reasoning-block) 'done)
+                            (not (plist-member delta :reasoning)))
+                  (if-let* ((reasoning-chunk (plist-get delta :reasoning)) ;for openrouter
+                            ((not (eq reasoning-chunk :null))))
+                      (plist-put info :reasoning
+                                 (concat (plist-get info :reasoning) reasoning-chunk))
+                    ;; Done with reasoning if we get non-empty content
+                    (if-let* ((c (plist-get delta :content))
+                              ((not (or (eq c :null) (string-empty-p c)))))
+                        (if (plist-member info :reasoning) ;Is this a reasoning model?
+                            (plist-put info :reasoning-block t) ;End of streaming reasoning block
+                          (plist-put info :reasoning-block 'done))))))))) ;Not using a reasoning model
       (error (goto-char (match-beginning 0))))
     (apply #'concat (nreverse content-strs))))
 
@@ -245,7 +259,10 @@ Mutate state INFO with response metadata."
                (map-nested-elt response '(:usage :completion_tokens)))
     ;; OpenAI returns either non-blank text content or a tool call, not both
     (if (and content (not (or (eq content :null) (string-empty-p content))))
-        content
+        (prog1 content
+          (when-let* ((reasoning (plist-get message :reasoning)) ;look for reasoning blocks
+                      ((and (stringp reasoning) (not (string-empty-p reasoning)))))
+            (plist-put info :reasoning reasoning)))
       (prog1 nil                        ; Look for tool calls only if no content
         (when-let* ((tool-calls (plist-get message :tool_calls)))
           (gptel--inject-prompt    ; First add the tool call to the prompts list
@@ -305,9 +322,9 @@ Mutate state INFO with response metadata."
    (lambda (tool-call)
      (list
       :role "tool"
-      :content (plist-get tool-call :result)
       :tool_call_id (gptel--openai-format-tool-id
-                     (plist-get tool-call :id))))
+                     (plist-get tool-call :id))
+      :content (plist-get tool-call :result)))
    tool-use))
 
 (defun gptel--openai-format-tool-id (tool-id)
@@ -329,7 +346,7 @@ Mutate state INFO with response metadata."
            if text collect
            (list :role (if role "user" "assistant") :content text)))
 
-(cl-defmethod gptel--parse-buffer ((_backend gptel-openai) &optional max-entries)
+(cl-defmethod gptel--parse-buffer ((backend gptel-openai) &optional max-entries)
   (let ((prompts) (prev-pt (point))
         (include-media (and gptel-track-media
                             (or (gptel--model-capable-p 'media)
@@ -346,20 +363,20 @@ Mutate state INFO with response metadata."
                (push (list :role "assistant" :content content) prompts)))
             (`(tool . ,id)
              (save-excursion
-               (condition-case _err
+               (condition-case nil
                    (let* ((tool-call (read (current-buffer)))
-                          (id (gptel--openai-format-tool-id id))
                           (name (plist-get tool-call :name))
                           (arguments (gptel--json-encode (plist-get tool-call :args))))
-                     (push (list :role "tool"
-                                 :tool_call_id id
-                                 :content
-                                 (string-trim
-                                  (buffer-substring-no-properties (point) prev-pt)))
+                     (plist-put tool-call :id id)
+                     (plist-put tool-call :result
+                                (string-trim (buffer-substring-no-properties
+                                              (point) prev-pt)))
+                     (push (car (gptel--parse-tool-results backend (list tool-call)))
                            prompts)
                      (push (list :role "assistant"
                                  :tool_calls
-                                 (vector (list :type "function" :id id
+                                 (vector (list :type "function"
+                                               :id (gptel--openai-format-tool-id id)
                                                :function `( :name ,name
                                                             :arguments ,arguments))))
                            prompts))

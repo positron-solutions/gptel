@@ -23,7 +23,8 @@
 ;;
 
 ;;; Code:
-(eval-when-compile (require 'cl-lib))
+(eval-when-compile (require 'gptel))
+(require 'cl-lib)
 (require 'org-element)
 (require 'outline)
 
@@ -50,6 +51,7 @@
 (declare-function gptel-backend-name "gptel")
 (declare-function gptel--parse-buffer "gptel")
 (declare-function gptel--parse-directive "gptel")
+(declare-function gptel--with-buffer-copy "gptel")
 (declare-function org-entry-get "org")
 (declare-function org-entry-put "org")
 (declare-function org-with-wide-buffer "org-macs")
@@ -88,10 +90,29 @@ of Org."
           (nreverse acc)))))
   (if (fboundp 'org-element-begin)
       (progn (declare-function org-element-begin "org-element")
-             (defalias 'gptel-org--element-begin 'org-element-begin))
+             (declare-function org-element-end "org-element")
+             (defalias 'gptel-org--element-begin 'org-element-begin)
+             (defalias 'gptel-org--element-end 'org-element-end))
     (defun gptel-org--element-begin (node)
       "Get `:begin' property of NODE."
-      (org-element-property :begin node))))
+      (org-element-property :begin node))
+    (defun gptel-org--element-end (node)
+      "Get `:end' property of NODE."
+      (org-element-property :end node))))
+
+(defcustom gptel-org-ignore-elements '(property-drawer)
+  "List of Org elements that should be stripped from the prompt
+before sending it.
+
+By default gptel will remove Org property drawers from the
+prompt.  For the full list of available elements, please see
+`org-element-all-elements'.
+
+Please note: Removing property-drawer elements is fast, but
+adding elements to this list can significantly slow down
+`gptel-send'."
+  :group 'gptel
+  :type '(repeat symbol))
 
 ;; NOTE: This can be converted to a cl-defmethod for `gptel--parse-buffer'
 ;; (conceptually cleaner), but will cause load-order issues in gptel.el and
@@ -107,21 +128,88 @@ point, or PROMPT-END if provided."
   (unless prompt-end (setq prompt-end (point)))
   (let ((max-entries (and gptel--num-messages-to-send
                           (* 2 gptel--num-messages-to-send))))
-
     (let ((org-buf (current-buffer))
-          (beg (point-min))
-          (end (point-max)))
-      (with-temp-buffer
-        ;; TODO(org) duplicated above
-        (dolist (sym '( gptel-backend gptel--system-message gptel-model
-                        gptel-mode gptel-track-response gptel-track-media))
-          (set (make-local-variable sym)
-               (buffer-local-value sym org-buf)))
-        (insert-buffer-substring org-buf beg end)
-        (gptel--org-unescape-tool-results)
-        (gptel--org-strip-tool-headers)
-        (let ((major-mode 'org-mode))
-          (gptel--parse-buffer gptel-backend max-entries))))))
+            (beg (point-min)) (end (point-max)))
+        (gptel--with-buffer-copy org-buf beg end
+          (gptel-org--unescape-tool-results)
+          (gptel-org--strip-elements)
+          (gptel-org--strip-block-headers)
+          (when gptel-org-ignore-elements (gptel-org--strip-elements))
+          (save-excursion (run-hooks 'gptel-prompt-filter-hook))
+          (gptel--parse-buffer gptel-backend max-entries)))))
+
+(defun gptel-org--strip-elements ()
+  "Remove all elements in `gptel-org-ignore-elements' from the
+prompt."
+  (let ((major-mode 'org-mode) element-markers)
+    (if (equal '(property-drawer) gptel-org-ignore-elements)
+        (save-excursion
+          (goto-char (point-min))
+          (while (re-search-forward org-property-drawer-re nil t)
+            ;; ;; Slower but accurate
+            ;; (let ((drawer (org-element-at-point)))
+            ;;   (when (org-element-type-p drawer 'property-drawer)
+            ;;     (delete-region (org-element-begin drawer) (org-element-end drawer))))
+
+            ;; Fast but inexact, can have false positives
+            (delete-region (match-beginning 0) (match-end 0))))
+      ;; NOTE: Parsing the buffer is extremely slow.  Avoid this path unless
+      ;; required.
+      ;; NOTE: `org-element-map' takes a third KEEP-DEFERRED argument in newer
+      ;; Org versions
+      (org-element-map (org-element-parse-buffer 'element nil)
+          gptel-org-ignore-elements
+        (lambda (node)
+          (push (list (gptel-org--element-begin node)
+                      (gptel-org--element-end node))
+                element-markers)))
+      (dolist (bounds element-markers)
+        (apply #'delete-region bounds)))))
+
+(defun gptel-org--strip-block-headers ()
+  "Remove all gptel-specific block headers and footers.
+Every line that matches will be removed entirely.
+
+This removal is necessary to avoid auto-mimicry by LLMs."
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward
+            (rx line-start (literal "#+")
+                (or (literal "begin") (literal "end"))
+                (or (literal "_tool") (literal "_reasoning")))
+            nil t)
+      (delete-region (match-beginning 0)
+                     (min (point-max) (1+ (line-end-position)))))))
+
+(defun gptel-org--unescape-tool-results ()
+  "Undo escapes done to keep results from escaping blocks.
+Scans backward for gptel tool text property, reads the arguments, then
+unescapes the remainder."
+  (save-excursion
+    (goto-char (point-max))
+    (let ((prev-pt (point)))
+      (while (> prev-pt (point-min))
+        (goto-char
+         (previous-single-char-property-change (point) 'gptel))
+        (let ((prop (get-text-property (point) 'gptel))
+              (backward-progress (point)))
+          (when (eq (car-safe prop) 'tool)
+            ;; User edits to clean up can potentially insert a tool-call header
+            ;; that is propertized.  Tool call headers should not be
+            ;; propertized.
+            (when (looking-at-p "[[:space:]]*#\\+begin_tool")
+              (goto-char (match-end 0)))
+            (condition-case nil
+                (read (current-buffer))
+              ((end-of-file invalid-read-syntax)
+               (message "Could not read tool arguments")))
+            ;; TODO this code is able to put the point behind prev-pt, which
+            ;; makes the region inverted.  The `max' catches this, but really
+            ;; `read' and `looking-at' are the culprits.  Badly formed tool
+            ;; blocks can lead to this being necessary.
+            (org-unescape-code-in-region
+             (min prev-pt (point)) prev-pt))
+          (goto-char (setq prev-pt backward-progress)))))))
 
 ;; Handle media links in the buffer
 (cl-defmethod gptel--parse-media-links ((_mode (eql 'org-mode)) beg end)
@@ -380,48 +468,6 @@ cleaning up after."
               (buffer-substring (point) start-pt)
             (prog1 (buffer-substring (point) (point-max))
                    (set-marker start-pt (point-max)))))))))
-
-(defun gptel--org-strip-tool-headers ()
-  "Remove all tool_call block headers and footers.
-Every line that matches will be removed entirely."
-  (save-excursion
-    (goto-char (point-min))
-    (while (re-search-forward (rx line-start (literal "#+")
-                                  (or (literal "begin") (literal "end"))
-                                  (literal "_tool"))
-                              nil t)
-      (delete-region (match-beginning 0)
-                     (min (point-max) (1+ (line-end-position)))))))
-
-(defun gptel--org-unescape-tool-results ()
-  "Undo escapes done to keep results from escaping blocks.
-Scans backward for gptel tool text property, reads the arguments, then
-unescapes the remainder."
-  (save-excursion
-    (goto-char (point-max))
-    (let ((prev-pt (point)))
-      (while (> prev-pt (point-min))
-        (goto-char
-         (previous-single-char-property-change (point) 'gptel))
-        (let ((prop (get-text-property (point) 'gptel))
-              (backward-progress (point)))
-          (when (eq (car-safe prop) 'tool)
-            ;; User edits to clean up can potentially insert a tool-call header
-            ;; that is propertized.  Tool call headers should not be
-            ;; propertized.
-            (when (looking-at-p "[[:space:]]*#\\+begin_tool")
-              (goto-char (match-end 0)))
-            (condition-case _err
-                (read (current-buffer))
-              ((end-of-file invalid-read-syntax)
-               (message "Could not read tool arguments")))
-            ;; TODO this code is able to put the point behind prev-pt, which
-            ;; makes the region inverted.  The `max' catches this, but really
-            ;; `read' and `looking-at' are the culprits.  Badly formed tool
-            ;; blocks can lead to this being necessary.
-            (org-unescape-code-in-region
-             (min prev-pt (point)) prev-pt))
-          (goto-char (setq prev-pt backward-progress)))))))
 
 (provide 'gptel-org)
 ;;; gptel-org.el ends here

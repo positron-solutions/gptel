@@ -78,12 +78,12 @@ Before requesting a backend, check if it implements some other backend's API and
 #+html: </div>
 
 - Interact with LLMs from anywhere in Emacs (any buffer, shell, minibuffer, wherever).
-- Supports multi-modal input (include images, documents).
 - LLM responses are in Markdown or Org markup.
 - Supports multiple independent conversations and one-off ad hoc interactions.
 - Supports tool-use to equip LLMs with agentic capabilities (experimental feature).
+- Supports multi-modal input (include images, documents).
 - Edit your previous prompts or LLM responses when continuing a conversation. These will be fed back to the model.
-- Introspection and logging tools for debugging and dry-runs
+- Supports introspection, so you can see /exactly/ what will be sent.  Inspect and modify queries before sending them.
 - Pause multi-stage requests at an intermediate stage and resume them later.
 - Don't like gptel's workflow? Use it to create your own for any supported model/backend with a [[https://github.com/karthink/gptel/wiki/Defining-custom-gptel-commands][simple API]].
 
@@ -893,6 +893,12 @@ You can examine the active context from the menu:
 And then browse through or remove context from the context buffer:
 #+html: <img src="https://github.com/karthink/gptel/assets/8607532/79a5ffe8-3d63-4bf7-9bf6-0457ab61bf2a" align="center" alt="Image showing gptel's context buffer.">
 
+*** Handle "reasoning" content
+
+Some LLMs include in their response a "thinking" or "reasoning" block.  This text improves the quality of the LLM’s final output, but may not be interesting to you by itself.  You can decide how you would like this "reasoning" content to be handled by gptel by setting the user option =gptel-include-reasoning=.  You can include it in the LLM response (the default), omit it entirely, include it in the buffer but ignore it on subsequent conversation turns, or redirect it to another buffer.  As with most options, you can specify this behvaior from gptel's transient menu globally, buffer-locally or for the next request only.
+
+When included with the response, reasoning content will be delimited by Org blocks or markdown backticks.
+
 *** Tool use (experimental)
 
 gptel can provide the LLM with client-side elisp "tools", or function specifications, along with the request.  If the LLM decides to run the tool, it supplies the tool call arguments, which gptel uses to run the tool in your Emacs session.  The result is optionally returned to the LLM to complete the task.
@@ -1172,6 +1178,7 @@ Other Emacs clients for LLMs prescribe the format of the interaction (a comint s
 | =gptel-directives=    | Alist of system directives, can switch on the fly.      |
 | =gptel-max-tokens=    | Maximum token count (in query + response).              |
 | =gptel-temperature=   | Randomness in response text, 0 to 2.                    |
+| =gptel-cache=         | Cache prompts, system message or tools (Anthropic only) |
 | =gptel-use-context=   | How/whether to include additional context               |
 | =gptel-use-tools=     | Disable, allow or force LLM tool-use                    |
 | =gptel-tools=         | List of tools to include with requests                  |
